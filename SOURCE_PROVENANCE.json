@@ -1,0 +1,22 @@
+{
+  "releaseBase": "Archived corrected demo, 2026-10-26",
+  "currentHistoricalCandidateUsedAsBase": false,
+  "baseSourceHashes": {
+    "cdagtl_consensus.m": "4ccbfa09a13406eba70cb8925b8f2d4873da14c6eb216b6009136a5a5bf3de55",
+    "cdagtl_fit.m": "ce28263e65614a0c6f50551feb58f6a528f774c70b7d1eb62f5fca6bb1ea1702",
+    "cdagtl_graph.m": "31fb1aaf6d550f8786b3aa4e906d21eb49693a0cb9cee4fbbcc157d1961a240b",
+    "cdagtl_kmeans.m": "a59a053ee5476699710d569876b1916f3ba137ab974cc10d06c774c1756032ea",
+    "cdagtl_simplex.m": "81c67b8ab0f60597a19dcf097aee8196018a12b17d8b8bdce3df870c2f073b86",
+    "cdagtl_spectral.m": "5c149ee675809716fad495568601fe9976317a1e266f23b9f68a272a5bb99723",
+    "cdagtl_stationarity.m": "6cc386101db8d4309680cf5ed57445cb030f030fa1dfc8e65f4d57be7984a17f",
+    "cdagtl_tnn.m": "09e5d1315278085cc4fbb815ab3ef3e296795fdd37ab1e0fd5dd2b7e2fb9bf9a",
+    "cdagtl_weights.m": "62381630ac04a85d94c37ba192b390eba0eeac2d29d21ae19be539796363f45e"
+  },
+  "changes": [
+    "Zero-padding feature embedding and dimension metadata",
+    "Ten full NGs repetitions and seven metrics",
+    "Recorded seeds, models, labels, summaries and honest stopping states",
+    "Validation for typed seeds, clustering restart count and square-embedding boundary"
+  ],
+  "preservedOldAndCurrentDemos": true
+}

@@ -1,0 +1,7 @@
+results/
+*.asv
+*.m~
+*.log
+matlab_workspace.mat
+.DS_Store
+Thumbs.db

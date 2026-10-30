@@ -1,0 +1,6 @@
+{
+  "file": "data/my_NGs_Per0.5.mat",
+  "bytes": 220420,
+  "sha256": "d64e68bf02be63673f79591a52eae51519ea2912851e0bd5f3e8be3105425efb",
+  "sourceDescription": "Unmodified processed NGs benchmark from the original experiment workspace; existing data, labels and observed-index masks."
+}
