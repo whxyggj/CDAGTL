@@ -1,10 +1,10 @@
 function [model,history]=cdagtl_fit(data,observed,c,options)
-% Corrected CDAGTL solver. Training uses cluster count, NEVER ground truth labels.
+% CDAGTL with the paper's frozen-distance C update and primal stopping rule.
+% Training uses cluster count, NEVER ground truth labels.
 % See README for objective, update order, normalization and validation limits.
 if nargin<4,options=struct;end
 o=struct('anchors',2*c,'alpha',.03125,'beta',1,'seed',1,'maxIter',300, ...
-    'mu',1,'muGrowth',1.2,'muMax',1e4,'tolPrimal',1e-6, ...
-    'tolChange',1e-6,'tolStationarity',1e-5,'cMaxIter',50,'cTolerance',1e-7);
+    'mu',1,'muGrowth',1.2,'muMax',1e4,'tolPrimal',1e-6);
 names=fieldnames(options);
 for j=1:numel(names)
     assert(isfield(o,names{j}),'CDAGTL:option','Unknown option: %s',names{j});o.(names{j})=options.(names{j});
@@ -15,10 +15,10 @@ assert(isscalar(c)&&c==fix(c)&&c>=1&&c<=m&&m<=n&&m==fix(m),'CDAGTL:anchors','Req
 assert(isequal(size(observed),[n,V])&&all(ismember(observed(:),[0,1])),'CDAGTL:mask','observed must be samples-by-views binary.');
 observed=logical(observed);
 assert(all(any(observed,2))&&all(any(observed,1)),'CDAGTL:mask','Every sample and view must have observations.');
-assert(o.alpha>=0&&o.beta>0&&o.mu>0&&o.muMax>=o.mu&&o.muGrowth>=1,'CDAGTL:parameters','Invalid penalties.');
-assert(o.maxIter>=1&&o.maxIter==fix(o.maxIter)&&o.cMaxIter>=1&&o.cMaxIter==fix(o.cMaxIter),'CDAGTL:iterations','Iteration budgets must be positive integers.');
+assert(o.alpha>=0&&o.beta>0&&o.mu>0&&o.muMax>=o.mu&&o.muGrowth>1,'CDAGTL:parameters','Invalid penalties; muGrowth must exceed one.');
+assert(o.maxIter>=1&&o.maxIter==fix(o.maxIter),'CDAGTL:iterations','Iteration budget must be a positive integer.');
 vals=struct2cell(o);assert(all(cellfun(@(x)isnumeric(x)&&isscalar(x)&&isfinite(x),vals)),'CDAGTL:parameters','Options must be finite numeric scalars.');
-assert(o.tolPrimal>=0&&o.tolChange>=0&&o.tolStationarity>=0&&o.cTolerance>=0,'CDAGTL:tolerance','Tolerances must be nonnegative.');
+assert(o.tolPrimal>=0,'CDAGTL:tolerance','Primal tolerance must be nonnegative.');
 assert(o.seed==fix(o.seed)&&o.seed>=0&&o.seed<=2^32-1,'CDAGTL:seed','seed must be an integer in [0,2^32-1].');
 saved=rng;cleanup=onCleanup(@()rng(saved));rng(o.seed,'twister'); %#ok<NASGU>
 X=cell(V,1);A=X;Z=X;D=X;Pi=X;
@@ -34,7 +34,7 @@ for v=1:V
     [A{v},~]=qr(randn(size(X{v},1),m),0);Z{v}=C;D{v}=zeros(m,n);Pi{v}=zeros(m,n);
 end
 w=ones(V,1)/V;J=pack(Z);Phi=zeros(size(J));mu=o.mu;F=cdagtl_spectral(C,c);
-fields={'objective','primal','primalMax','stationarity','relativeChange','mu','cObjectiveChange','cProjectedGradient', ...
+fields={'objective','primal','primalMax','relativeChange','mu','nextMu','cSurrogateChange','cSurrogateProjectedGradient', ...
     'anchorOrthogonality','spectralOrthogonality','minAnchorDegree','minWeight','weightSumError'};
 for j=1:numel(fields),history.(fields{j})=zeros(o.maxIter,1);end
 history.stopReason='max_iterations';
@@ -50,7 +50,7 @@ for k=1:o.maxIter
     F=cdagtl_spectral(C,c);
     M=zeros(m,n);
     for v=1:V,M=M+(Z{v}-D{v}+Pi{v}/mu)/V;end
-    [C,ci]=cdagtl_consensus(C,F,M,o.alpha,mu*V,o.cMaxIter,o.cTolerance);
+    [C,ci]=cdagtl_consensus(C,F,M,o.alpha,mu*V);
     residual=zeros(m,n,V);
     for v=1:V
         D{v}=(mu*(Z{v}-C)+Pi{v})/(2*o.beta+mu);
@@ -74,23 +74,26 @@ for k=1:o.maxIter
     % F represents a subspace; sign/rotation changes do not change its graph term.
     change=max(change,sqrt(max(0,2*c-2*norm(old.F'*F,'fro')^2))/sqrt(c));
     history.relativeChange(k)=change;history.mu(k)=mu;
-    history.cObjectiveChange(k)=ci.objectiveChange;history.cProjectedGradient(k)=ci.projectedGradient;
-    history.stationarity(k)=cdagtl_stationarity(X,observed,A,Z,C,D,J,F,w,Pi,Phi,o.alpha,o.beta);
+    history.cSurrogateChange(k)=ci.surrogateChange;
+    history.cSurrogateProjectedGradient(k)=ci.projectedGradient;
     history.anchorOrthogonality(k)=max(cellfun(@(a)norm(a'*a-eye(m),'fro'),A));
     history.spectralOrthogonality(k)=norm(F'*F-eye(c),'fro');
     history.minAnchorDegree(k)=min(sum(C,2));history.minWeight(k)=min(w);history.weightSumError(k)=abs(sum(w)-1);
-    assert(all(isfinite([history.objective(k),history.stationarity(k),history.primal(k)])),'CDAGTL:numerical','Nonfinite iterate diagnostics.');
-    if history.primalMax(k)<=o.tolPrimal&&history.stationarity(k)<=o.tolStationarity&&change<=o.tolChange
-        history.stopReason='tolerance';break;
+    assert(all(isfinite([history.objective(k),history.primal(k),history.cSurrogateProjectedGradient(k)])),'CDAGTL:numerical','Nonfinite iterate diagnostics.');
+    mu=min(mu*o.muGrowth,o.muMax);history.nextMu(k)=mu;
+    if history.primalMax(k)<=o.tolPrimal
+        history.stopReason='primal_tolerance';break;
     end
-    mu=min(mu*o.muGrowth,o.muMax);
 end
 history.iterations=k;
 for j=1:numel(fields),history.(fields{j})=history.(fields{j})(1:k);end
 fused=zeros(m,n);for v=1:V,fused=fused+Z{v}/V;end
+% Retain the previous clustering protocol: all economy left singular vectors.
 [representation,~,~]=svd(fused','econ');
 model=struct('A',{A},'Z',{Z},'C',C,'D',{D},'J',J,'F',F,'weights',w,'Pi',{Pi},'Phi',Phi, ...
-    'representation',representation,'options',o,'observed',observed,'embedding',embedding,'tnnConvention','mean_fft_slice_nuclear_norms');
+    'representation',representation,'options',o,'observed',observed,'embedding',embedding, ...
+    'consensusUpdate','frozen_normalized_distances','stoppingCriterion','primal_max', ...
+    'representationMethod','full_economy_left_singular_vectors','tnnConvention','mean_fft_slice_nuclear_norms');
 end
 function T=pack(Z)
 T=permute(cat(3,Z{:}),[1 3 2]);

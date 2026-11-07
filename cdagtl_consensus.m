@@ -1,28 +1,20 @@
-function [C,info]=cdagtl_consensus(C,F,M,alpha,curvature,maxIter,tol)
-% Inexact minimization of ORIGINAL C block with projected-gradient/Armijo steps.
-% curvature=mu*number_of_views. Reject zero-degree candidates.
-fun=@(P) alpha*cdagtl_graph(P,F)+curvature/2*norm(P-M,'fro')^2;
-initial=fun(C); info.accepted=false; info.innerIterations=0; step=1/curvature;
-for k=1:maxIter
-    [~,G]=cdagtl_graph(C,F); G=alpha*G+curvature*(C-M);
-    mapping=C-cdagtl_simplex(C-G);
-    if norm(mapping,'fro')/max(1,norm(C,'fro'))<=tol,break;end
-    current=fun(C); accepted=false;
-    for bt=1:60
-        trial=cdagtl_simplex(C-step*G); direction=trial-C;
-        if all(sum(trial,2)>0)
-            candidate=fun(trial);
-            if isfinite(candidate)&&candidate<=current+1e-4*sum(G(:).*direction(:))
-                C=trial; accepted=true;info.accepted=true;break;
-            end
-        end
-        step=step/2;
-    end
-    info.innerIterations=k;
-    if ~accepted,break;end
-    step=min(step*1.5,1/curvature);
-end
-[~,G]=cdagtl_graph(C,F);G=alpha*G+curvature*(C-M);
+function [C,info]=cdagtl_consensus(C,F,M,alpha,curvature)
+% Paper's approximate C update: freeze normalized distances, then project once.
+% curvature=mu*number_of_views. Diagnostics refer to this convex surrogate.
+[m,n]=size(C);
+assert(isequal(size(M),[m n])&&size(F,1)==m+n,'CDAGTL:shape','Incompatible C, M or F dimensions.');
+assert(isfinite(alpha)&&alpha>=0&&isfinite(curvature)&&curvature>0,'CDAGTL:parameters','Invalid surrogate coefficients.');
+assert(all(isfinite(C(:)))&&all(C(:)>=0)&&max(abs(sum(C,1)-1))<1e-8,'CDAGTL:simplex','C must be column stochastic.');
+r=sum(C,2);invRoot=zeros(m,1);positive=r>0;
+invRoot(positive)=1./sqrt(r(positive));
+Fu=F(1:n,:);B=bsxfun(@times,F(n+1:n+m,:),invRoot);
+K=bsxfun(@plus,sum(B.^2,2),sum(Fu.^2,2)')-2*B*Fu';
+K=max(K,0); % Squared distances can be slightly negative from roundoff.
+previous=C;
+C=cdagtl_simplex(M-alpha/curvature*K);
+G=alpha*K+curvature*(C-M);
+info.innerIterations=1;
 info.projectedGradient=norm(C-cdagtl_simplex(C-G),'fro')/max(1,norm(C,'fro'));
-info.objectiveChange=fun(C)-initial;
+info.surrogateChange=alpha*sum(sum((C-previous).*K)) ...
+    +curvature/2*(norm(C-M,'fro')^2-norm(previous-M,'fro')^2);
 end

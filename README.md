@@ -2,7 +2,7 @@
 
 MATLAB implementation of **Consistent and Diverse Anchor Graph Tensor Learning for Incomplete Multi-view Clustering**.
 
-This revision release starts from the corrected demo and includes feature-space feasibility repair, stable nonnegative view weights, and an explicit repeated-experiment protocol. It is a revised implementation: the historical manuscript tables and the separate tensor-layout diagnostic used earlier implementations. This repository does not claim to reproduce those tables or prove general convergence of nonconvex multi-block ADMM.
+Version **1.1.0-paper-optimization** aligns the C update and stopping rule with the current manuscript revision while retaining feature-space padding, stable nonnegative view weights, and ten complete experiment repetitions. The final full economy-SVD representation is intentionally retained from the earlier clustering protocol. Historical manuscript tables and tensor-layout diagnostics used earlier implementations; this release does not claim to reproduce them.
 
 ## Quick start
 
@@ -74,7 +74,7 @@ For each view, the normalized data are embedded with trailing zeros into working
 
 Padding preserves the data Gram matrix, distances, and norms, but does not add information or increase data rank. The enlarged anchor parameterization can change reconstruction losses and fitted graphs. The original and working dimensions are recorded in `model.embedding`; padding is not claimed to reproduce the historical unpadded experiments.
 
-For the final clustering protocol retained from the corrected demo, all left singular vectors of the fused graph are used. `run_demo` additionally requires `m < numSamples`: at equality this full basis is a square orthogonal matrix with constant pairwise row distances. The direct training API still accepts the mathematically feasible `m == numSamples` case, but its full representation should not be used for clustering in that case.
+The final clustering representation uses every left singular vector returned by `svd(fused','econ')`, where `fused` is the mean of the learned view graphs. This full economy-SVD step is an intentional exception to the current paper's Algorithm 1, retained to preserve the earlier clustering protocol. `run_demo` requires `m < numSamples`: at equality the full basis is square and orthogonal, with constant pairwise row distances. The direct training API accepts the mathematically feasible `m == numSamples` case, but its full representation should not be used for clustering then.
 
 View weights solve `min sum_v w_v^2*t_v`, subject to `w >= 0` and `sum(w)=1`, where `t_v` is the squared reconstruction error **only on observed columns**:
 
@@ -83,11 +83,21 @@ View weights solve `min sum_v w_v^2*t_v`, subject to `w >= 0` and `sum(w)=1`, wh
 
 These are explicit zero-error and small-error safeguards; no epsilon is inserted into the objective. Missing stored values are excluded from every reconstruction loss, including weight estimation.
 
-## Corrected solver and interpretation
+## Solver updates and diagnostics
 
-The release retains the corrected demo's standard mean-TNN proximal map, positive-degree graph initialization, orthonormal spectral embedding, normalized-spectral gradients and Armijo descent for the C block, masked weights, same-sweep penalty in multiplier updates, and uncensored stopping diagnostics. It does **not** use the historical additional core-tensor shrinkage.
+The update order is A, Z, J, F, C, D, weights, multipliers, penalty growth, then the stopping check. The standard mean-TNN proximal map, orthonormal spectral embedding, masked weight errors, and same-sweep penalty in primal and multiplier updates are retained. There is no additional core-tensor shrinkage.
 
-The update order is A, Z, J, F, C, D, weights, multipliers, then the next penalty. C is an inexact block update with accepted descent steps; it is not claimed to be a global minimizer of a nonconvex subproblem. Training stops only when the primal, stationarity and iterate-change criteria all pass, or when the iteration budget is exhausted. `max_iterations` is not convergence. The original objective need not decrease during infeasible ADMM iterations.
+For C, normalized distances `K` are computed using the old C's degrees and held fixed. One columnwise simplex projection solves the resulting convex surrogate:
+
+```matlab
+C = cdagtl_simplex(M - alpha/(mu*V)*K);
+```
+
+Here `M` is the mean of `Z{v}-D{v}+Pi{v}/mu`. The surrogate is `alpha*sum(K.*C,'all') + mu*V/2*norm(C-M,'fro')^2`. `history.cSurrogateChange` and `history.cSurrogateProjectedGradient` describe this frozen-distance problem. Surrogate descent does not imply descent of the original degree-dependent C objective or of the full objective.
+
+Exactly zero anchor degrees use reciprocal square root zero; positive degrees are unchanged. Zero-degree anchor rows are allowed, and C is not perturbed to remove them. The original graph-gradient calculation, used only by the optional standalone `cdagtl_stationarity` diagnostic, requires strictly positive anchor degrees.
+
+Training stops when `history.primalMax <= tolPrimal`, with `stopReason='primal_tolerance'`, or exhausts `maxIter`, with `stopReason='max_iterations'`. The maximum residual covers both `Z{v}-C-D{v}` and the tensor constraint `Z-J`. After updating the multipliers, `mu` grows by `muGrowth > 1`, capped at `muMax`, before this stopping check. Objective and `history.relativeChange` remain diagnostics; stationarity is not computed during training. A small primal residual certifies constraint satisfaction to the chosen tolerance, not stationarity or general convergence of nonconvex multi-block ADMM.
 
 The sample-mode FFT is an algebraic prior. The standard tensor term couples view columns within each Fourier slice, but is not generally invariant to arbitrary sample permutations. No physical cyclic sample relationship is asserted. See `docs/REVISION_NOTES.md` for the distinction from historical experiments.
 
@@ -107,7 +117,7 @@ addpath('tests');
 report = run_tests();
 ```
 
-Tests cover padding and orthogonality, simplex feasibility, FFT-mean proximal scaling, finite-difference spectral gradients, C descent, zero-degree rejection, zero/tiny reconstruction-error weights, missing-value isolation, seed handling, stopping limits, known clustering metrics, exhaustive small assignment problems, and complete repeated executions with persisted models. Validation records for the default NGs run are stored in `validation/`; large per-run models are generated locally under the ignored `results/` directory.
+Tests cover padding and orthogonality, simplex feasibility, FFT-mean proximal scaling, positive-degree spectral gradients, frozen-C surrogate optimality, zero-degree continuation, primal-only stopping and penalty order, retained full-SVD representations, zero/tiny reconstruction-error weights, missing-value isolation, seed handling, known clustering metrics, exhaustive small assignment problems, and complete repeated executions with persisted models. Release validation records are stored in `validation/`; previous-version records are preserved in `validation/archive/1.0.0-revision/`. Large per-run models are generated locally under the ignored `results/` directory.
 
 ## Code availability and citation
 

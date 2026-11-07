@@ -18,5 +18,19 @@
     "Recorded seeds, models, labels, summaries and honest stopping states",
     "Validation for typed seeds, clustering restart count and square-embedding boundary"
   ],
-  "preservedOldAndCurrentDemos": true
+  "preservedOldAndCurrentDemos": true,
+  "optimizationRevision": {
+    "version": "1.1.0-paper-optimization",
+    "date": "2026-11-07",
+    "previousReleaseCommit": "799cdf3fb3572e68dfb57c4898f5ea84cd449e8a",
+    "paperSourceSha256": "2984698779bb058a863ef187be0bc7e97811411e5b9d5bab6ecf5dc3eb3bebdd",
+    "changes": [
+      "Frozen-distance single simplex C update",
+      "Primal-only stopping after penalty growth",
+      "Zero-degree reciprocal-square-root convention",
+      "Surrogate diagnostics and refreshed ten-run NGs validation"
+    ],
+    "retainedClusteringProtocol": "Full economy left singular vectors of the transposed mean graph before k-means",
+    "historicalResultsModified": false
+  }
 }

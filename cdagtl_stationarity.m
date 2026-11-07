@@ -1,5 +1,6 @@
 function value=cdagtl_stationarity(X,mask,A,Z,C,D,J,F,w,Pi,Phi,alpha,beta)
 % RMS blockwise KKT residuals of the unaugmented split-model Lagrangian.
+% Optional diagnostic for positive anchor degrees; not used by cdagtl_fit.
 V=numel(X);P=permute(Phi,[1 3 2]); totalPi=zeros(size(C));r=zeros(3*V+4,1);t=zeros(V,1);
 for v=1:V
     R=bsxfun(@times,A{v}*Z{v}-X{v},mask(:,v)');t(v)=sum(R(:).^2);

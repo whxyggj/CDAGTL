@@ -34,7 +34,9 @@ metadata.protocol='complete_training_and_clustering_with_fixed_missing_pattern';
 metadata.requestedRuns=o.repetitions;metadata.clusteringRestarts=o.clusteringRestarts;
 metadata.baseSeed=solverOptions.seed;metadata.matlabVersion=version;metadata.trainingUsesLabels=false;
 metadata.standardDeviation='sample_standard_deviation_over_complete_runs';
-metadata.codeVersion='1.0.0-revision';
+metadata.codeVersion='1.1.0-paper-optimization';
+metadata.consensusUpdate='frozen_normalized_distances';metadata.stoppingCriterion='primal_max';
+metadata.representationMethod='full_economy_left_singular_vectors';
 writejson(fullfile(o.outputDir,'protocol.json'),metadata);
 for run=1:o.repetitions
     options=solverOptions;options.seed=mod(solverOptions.seed+run-1,2^32);clusterSeed=mod(options.seed+10000,2^32);
@@ -45,7 +47,7 @@ for run=1:o.repetitions
         metrics=cdagtl_metrics(truth,labels);values(run,:)=cellfun(@(field)metrics.(field),metricNames);
         record=struct('run',run,'trainingSeed',options.seed,'clusteringSeed',clusterSeed, ...
             'iterations',history.iterations,'stopReason',history.stopReason,'fitSeconds',fitSeconds, ...
-            'clusteringSeconds',clusteringSeconds,'primalMax',history.primalMax(end),'stationarity',history.stationarity(end), ...
+            'clusteringSeconds',clusteringSeconds,'primalMax',history.primalMax(end), ...
             'relativeChange',history.relativeChange(end),'metrics',metrics);
         save(fullfile(o.outputDir,sprintf('run_%03d.mat',run)),'model','history','labels','truth','mask','metrics','record','-v7.3');
         if run==1,runs=record;else,runs(run)=record;end %#ok<AGROW>

@@ -2,8 +2,8 @@ cff-version: 1.2.0
 message: "Please cite the CDAGTL manuscript and identify the repository commit used."
 title: "Consistent and Diverse Anchor Graph Tensor Learning for Incomplete Multi-view Clustering"
 type: software
-version: "1.0.0-revision"
-date-released: 2026-10-30
+version: "1.1.0-paper-optimization"
+date-released: 2026-11-07
 repository-code: "https://github.com/whxyggj/CDAGTL"
 authors:
   - family-names: Pan

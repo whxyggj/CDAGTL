@@ -1,5 +1,6 @@
-function results=run_core_tests()
+function results=run_core_tests(reportPath)
 root=fileparts(fileparts(mfilename('fullpath'))); addpath(root);
+if nargin<1,reportPath=fullfile(root,'validation','tests.json');end
 names={'simplex','tnn','spectral_gradient','consensus','weights','solver','limits'};
 results=struct;
 for i=1:numel(names)
@@ -10,7 +11,10 @@ for i=1:numel(names)
     end
 end
 disp(results);
-fid=fopen(fullfile(root,'validation','tests.json'),'w'); fprintf(fid,'%s',jsonencode(results)); fclose(fid);
+if ~isempty(reportPath)
+    fid=fopen(reportPath,'w');assert(fid>=0,'CDAGTL:testReport','Cannot write test report.');
+    fprintf(fid,'%s',jsonencode(results));fclose(fid);
+end
 assert(all(structfun(@(s)strcmp(s,'PASS'),results)),'CDAGTL:testFailure','Some regression tests failed.');
 end
 function test_simplex()
@@ -36,11 +40,9 @@ catch ex, assert(strcmp(ex.identifier,'CDAGTL:zeroDegree')); end
 end
 function test_consensus()
 C=[.8 .2 .6;.2 .8 .4];F=cdagtl_spectral(C,2);M=[.2 .6 .3;.8 .4 .7];
-[out,info]=cdagtl_consensus(C,F,M,.4,2,50,1e-8);
-before=.4*cdagtl_graph(C,F)+norm(C-M,'fro')^2;
-after=.4*cdagtl_graph(out,F)+norm(out-M,'fro')^2;
-assert(after<=before+1e-12 && info.accepted);
-assert(all(sum(out,2)>0) && norm(sum(out)-1)<1e-12);
+[out,info]=cdagtl_consensus(C,F,M,.4,2);
+assert(info.innerIterations==1&&info.surrogateChange<=1e-12&&info.projectedGradient<1e-9);
+assert(all(out(:)>=0)&&norm(sum(out)-1)<1e-12);
 end
 function test_weights()
 X={eye(2),eye(2)}; A={eye(2),eye(2)}; Z={eye(2),[1 1;0 0]}; mask=logical([1 1;0 1]);
@@ -53,10 +55,11 @@ X{1}(:,1:2)=NaN;X{2}(:,9:10)=NaN;
 o=struct('anchors',3,'maxIter',5,'seed',11);
 [a,h]=cdagtl_fit(X,mask,2,o); [b,~]=cdagtl_fit(X,mask,2,o);
 assert(all(isfinite(a.C(:))) && norm(a.C-b.C,'fro')<1e-12);
-assert(all(sum(a.C,2)>0) && norm(sum(a.C)-1)<1e-10);
+assert(all(a.C(:)>=0) && norm(sum(a.C)-1)<1e-10);
 assert(h.iterations<=5 && numel(h.objective)==h.iterations);
-assert(all(isfinite(h.objective)) && all(isfinite(h.stationarity)));
-assert(all(h.cObjectiveChange<=1e-9));
+assert(all(isfinite(h.objective))&&all(isfinite(h.primalMax))&&all(isfinite(h.relativeChange)));
+assert(all(h.cSurrogateChange<=1e-9)&&all(h.cSurrogateProjectedGradient<1e-9));
+assert(all(h.nextMu==min(h.mu*a.options.muGrowth,a.options.muMax)));
 for v=1:2,assert(norm(a.A{v}'*a.A{v}-eye(3),'fro')<1e-10);end
 % Missing stored values must not affect the learned solution.
 X{1}(:,1:2)=1e9;X{2}(:,9:10)=-1e9;[c,~]=cdagtl_fit(X,mask,2,o);
@@ -68,6 +71,6 @@ try, cdagtl_fit(X,mask,3,struct('anchors',2));error('test:noFailure','Expected r
 catch ex,assert(strcmp(ex.identifier,'CDAGTL:anchors'));end
 try, cdagtl_fit(X,mask,2,struct('anchors',9));error('test:noFailure','Expected rejection');
 catch ex,assert(strcmp(ex.identifier,'CDAGTL:anchors'));end
-o=struct('anchors',2,'maxIter',20,'tolPrimal',1e99,'tolStationarity',1e99,'tolChange',1e99);
-[~,h]=cdagtl_fit(X,mask,2,o);assert(h.iterations==1 && strcmp(h.stopReason,'tolerance'));
+o=struct('anchors',2,'maxIter',20,'tolPrimal',1e99);
+[~,h]=cdagtl_fit(X,mask,2,o);assert(h.iterations==1 && strcmp(h.stopReason,'primal_tolerance'));
 end
